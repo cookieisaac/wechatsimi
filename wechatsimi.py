@@ -17,7 +17,10 @@ try:
     import urllib2 as urllib
 except ImportError:
     import urllib.request as urllib
-
+from functools import wraps
+import errno
+import os
+import signal
 
 uuid = '' #declare uuid as a global variable
 tip = 1 #whether the qr is scanned(0) or not(1)
@@ -37,6 +40,28 @@ My = []
 SyncKey = []
 
 QRImagePath = os.path.join(os.getcwd(), 'qrcode'+str(time.time())+'.jpg')
+    
+
+class TimeoutError(Exception):
+    pass
+    
+def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
+    def decorator(func):
+        def _handle_timeout(signum, frame):
+            raise TimeoutError(error_message)
+
+        def wrapper(*args, **kwargs):
+            signal.signal(signal.SIGALRM, _handle_timeout)
+            signal.alarm(seconds)
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                signal.alarm(0)
+            return result
+
+        return wraps(func)(wrapper)
+
+    return decorator
     
 def configure_logger():
     FORMAT = '[%(asctime)-15s][%(process)d][%(name)s][%(levelname)s][%(message)s]'
@@ -165,7 +190,7 @@ def getRequest(url, data=None):
         return urllib.Request(url=url, data=data)
         
 
-    
+@timeout(60)    
 def getUUID():
     global uuid
     
@@ -200,7 +225,8 @@ def getUUID():
             return True
         else:
             return False
-        
+
+@timeout(60)            
 def showQRCode():
     
     #Generate QR code
@@ -222,7 +248,8 @@ def showQRCode():
         print ('Please scan QR code to login: ' + QRImagePath)
     except Exception as e:
         raise e
-        
+
+@timeout(60)        
 def waitForLogin():
     global tip, base_uri, redirect_uri, push_uri
     url = 'https://login.weixin.qq.com/cgi-bin/mmwebwx-bin/login?tip=%s&uuid=%s&_=%s' % (
@@ -269,7 +296,8 @@ def waitForLogin():
             print ('Timeout, during login...')
             
         return code
-    
+
+@timeout(60)          
 def loginWechat():
     global skey, wxsid, wxuin, pass_ticket, BaseRequest
     request = getRequest(url=redirect_uri)
@@ -305,7 +333,7 @@ def loginWechat():
 
     return True
     
-    
+@timeout(60)    
 def initWebWechat():
     print ('Initializing Web Wechat...')
     logging.info('Start to init web wechat')
